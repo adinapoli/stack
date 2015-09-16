@@ -497,6 +497,7 @@ data SetupCmdOpts = SetupCmdOpts
     , scoForceReinstall :: !Bool
     , scoUpgradeCabal :: !Bool
     , scoStackSetupYaml :: !String
+    , scoGHCBindistURL :: !(Maybe String)
     }
 
 setupParser :: Parser SetupCmdOpts
@@ -519,6 +520,7 @@ setupParser = SetupCmdOpts
            <> value defaultStackSetupYaml
            <> showDefault
             )
+    <*> (optional $ strOption (long "ghc-bindist" <> help "XXX"))
   where
     readVersion = do
         s <- readerAsk
@@ -561,6 +563,7 @@ setupCmd SetupCmdOpts{..} go@GlobalOpts{..} = do
                   , soptsUpgradeCabal = scoUpgradeCabal
                   , soptsResolveMissingGHC = Nothing
                   , soptsStackSetupYaml = scoStackSetupYaml
+                  , soptsGHCBindistURL = scoGHCBindistURL
                   }
               case mpaths of
                   Nothing -> $logInfo "stack will use the GHC on your PATH"

@@ -12,7 +12,7 @@ module Data.Aeson.Extended (
   , withObjectWarnings
   , jsonSubWarnings
   , jsonSubWarningsT
-  , jsonSubWarningsMT
+  , jsonSubWarningsTT
   , logJSONWarnings
   , unWarningParser
   , (..:)
@@ -122,15 +122,12 @@ jsonSubWarningsT f =
     Traversable.mapM (jsonSubWarnings . return) =<< f
 
 -- | Handle warnings in a @Maybe Traversable@ of sub-objects.
-jsonSubWarningsMT
-    :: (Traversable t)
-    => WarningParser (Maybe (t (a, [JSONWarning])))
-    -> WarningParser (Maybe (t a))
-jsonSubWarningsMT f = do
-    ml <- f
-    case ml of
-        Nothing -> return Nothing
-        Just l -> fmap Just (jsonSubWarningsT (return l))
+jsonSubWarningsTT
+    :: (Traversable t, Traversable u)
+    => WarningParser (u (t (a, [JSONWarning])))
+    -> WarningParser (u (t a))
+jsonSubWarningsTT f =
+    Traversable.mapM (jsonSubWarningsT . return) =<< f
 
 -- | JSON parser that warns about unexpected fields in objects.
 type WarningParser a = WriterT WarningParserMonoid Parser a
