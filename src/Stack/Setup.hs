@@ -331,7 +331,9 @@ ensureGHC sopts = do
             installed <- listInstalled
 
             -- Install GHC
-            ghcIdent <- case getInstalledTool installed $(mkPackageName "ghc") (isWanted . GhcVersion) of
+            ghcVariant <- asks getGHCVariant
+            xxx <- parsePackageNameFromString ("ghc" ++ ghcVariantSuffix ghcVariant)
+            ghcIdent <- case getInstalledTool installed xxx (isWanted . GhcVersion) of
                 Just ident -> return ident
                 Nothing
                     | soptsInstallIfMissing sopts -> do
@@ -346,6 +348,7 @@ ensureGHC sopts = do
                         throwM $ CompilerVersionMismatch
                             msystem
                             (soptsWantedCompiler sopts, arch)
+                            ghcVariant
                             (soptsCompilerCheck sopts)
                             (soptsStackYaml sopts)
                             (fromMaybe
@@ -662,9 +665,17 @@ downloadAndInstallGHC si wanted versionCheck mbindistURL = do
             case platform of
                 Platform _ Cabal.Windows -> installGHCWindows
                 _ -> installGHCPosix
-    $logInfo "Preparing to install GHC to an isolated location."
+    $logInfo $
+        "Preparing to install GHC" <>
+        --XXX TEST
+        (case ghcVariant of
+            GHCStandard -> ""
+            v -> "(" <> T.pack (ghcVariantName v) <> ")") <>
+        " to an isolated location."
     $logInfo "This will not interfere with any system-level installation."
-    downloadAndInstallTool si downloadInfo $(mkPackageName "ghc") selectedVersion installer
+    --XXX TEST
+    xxx <- parsePackageNameFromString ("ghc" ++ ghcVariantSuffix ghcVariant)
+    downloadAndInstallTool si downloadInfo xxx selectedVersion installer
 
 getGhcKey :: (MonadReader env m, MonadThrow m, HasPlatform env, HasGHCVariant env, MonadLogger m, MonadIO m, MonadCatch m, MonadBaseControl IO m)
          => m Text
@@ -672,11 +683,7 @@ getGhcKey = do
     ghcVariant <- asks getGHCVariant
     osKey <- getOSKey
     --XXX TEST
-    return $
-        osKey <>
-        (case ghcVariant of
-             GHCStandard -> ""
-             v -> "-" <> T.pack (ghcVariantName v))
+    return $ osKey <> T.pack (ghcVariantSuffix ghcVariant)
 
 getOSKey :: (MonadReader env m, MonadThrow m, HasPlatform env, HasGHCVariant env, MonadLogger m, MonadIO m, MonadCatch m, MonadBaseControl IO m)
          => m Text

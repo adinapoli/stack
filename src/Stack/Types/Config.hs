@@ -828,12 +828,7 @@ platformRelDir
 platformRelDir = do
     platform <- asks getPlatform
     ghcVariant <- asks getGHCVariant
-    parseRelDir $
-        concat
-            [ Distribution.Text.display platform
-            , case ghcVariant of
-                  GHCStandard -> ""
-                  _ -> "-" ++ ghcVariantName ghcVariant]
+    parseRelDir (Distribution.Text.display platform <> ghcVariantSuffix ghcVariant)
 
 -- | Path to .shake files.
 configShakeFilesDir :: (MonadReader env m, HasBuildConfig env) => m (Path Abs Dir)
@@ -1032,12 +1027,18 @@ ghcVariantName GHCGMP4 = "gmp4"
 ghcVariantName GHCIntegerSimple = "integersimple"
 ghcVariantName (GHCCustom name) = "custom-" ++ name
 
+-- | Render a GHC variant to a String suffix.
+ghcVariantSuffix :: GHCVariant -> String
+ghcVariantSuffix GHCStandard = ""
+ghcVariantSuffix v = "-" ++ ghcVariantName v
+
 -- | Parse GHC variant from a String.
 parseGHCVariant :: (MonadThrow m) => String -> m GHCVariant
 parseGHCVariant s =
     case stripPrefix "custom-" s of
         Just name -> return (GHCCustom name)
         Nothing
+          | s == "" -> return GHCStandard
           | s == "standard" -> return GHCStandard
           | s == "gmp4" -> return GHCGMP4
           | s == "integersimple" -> return GHCIntegerSimple
