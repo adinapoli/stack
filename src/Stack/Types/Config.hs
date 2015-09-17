@@ -24,7 +24,7 @@ import           Data.Aeson.Extended
                  (ToJSON, toJSON, FromJSON, parseJSON, withText, object,
                   (.=), (..:), (..:?), (..!=), Value(String, Object),
                   withObjectWarnings, WarningParser, Object, jsonSubWarnings, JSONWarning,
-                  jsonSubWarningsT, jsonSubWarningsTT)
+                  jsonSubWarningsT, jsonSubWarningsTT, tellJSONField)
 import           Data.Attoparsec.Args
 import           Data.Binary (Binary)
 import           Data.ByteString (ByteString)
@@ -623,7 +623,7 @@ instance Monoid ConfigMonoid where
     , configMonoidCompilerCheck = configMonoidCompilerCheck l <|> configMonoidCompilerCheck r
     , configMonoidGhcOptions = Map.unionWith (++) (configMonoidGhcOptions l) (configMonoidGhcOptions r)
     , configMonoidExtraPath = configMonoidExtraPath l ++ configMonoidExtraPath r
-    , configMonoidSetupInfoLocations = configMonoidSetupInfoLocations l <> configMonoidSetupInfoLocations r
+    , configMonoidSetupInfoLocations = configMonoidSetupInfoLocations l ++ configMonoidSetupInfoLocations r
     }
 
 instance FromJSON (ConfigMonoid, [JSONWarning]) where
@@ -676,7 +676,8 @@ parseConfigMonoidJSON obj = do
         either (fail . show) return . parseAbsDir . T.unpack
 
     --XXX rename `setup-info` key?
-    configMonoidSetupInfoLocations <- jsonSubWarningsT (obj ..:? "setup-info" ..!= mempty)
+    xxx <- jsonSubWarningsT (obj ..:? "setup-info")
+    let configMonoidSetupInfoLocations = maybeToList xxx
 
     return ConfigMonoid {..}
   where
@@ -1061,6 +1062,8 @@ parseDownloadInfoFromObject o = do
     url <- o ..: "url"
     contentLength <- o ..:? "content-length"
     sha1TextMay <- o ..:? "sha1"
+    -- Don't warn about 'version' field that is sometimes included
+    tellJSONField "version"
     return
         DownloadInfo
         { downloadInfoUrl = url
@@ -1094,11 +1097,14 @@ data SetupInfo = SetupInfo
     deriving Show
 
 instance FromJSON (SetupInfo, [JSONWarning]) where
-    parseJSON = withObjectWarnings "SetupInfo" $ \o -> SetupInfo
-        <$> jsonSubWarningsT (o ..:? "sevenzexe-info")
-        <*> jsonSubWarningsT (o ..:? "sevenzdll-info")
-        <*> jsonSubWarningsT (o ..: "msys2" ..!= mempty)
-        <*> jsonSubWarningsTT (o ..: "ghc" ..!= mempty)
+    parseJSON = withObjectWarnings "SetupInfo" $ \o -> do
+        siSevenzExe <- jsonSubWarningsT (o ..:? "sevenzexe-info")
+        siSevenzDll <- jsonSubWarningsT (o ..:? "sevenzdll-info")
+        siMsys2 <- jsonSubWarningsT (o ..:? "msys2" ..!= mempty)
+        siGHCs <- jsonSubWarningsTT (o ..:? "ghc" ..!= mempty)
+        -- Don't warn about 'portable-git' that is no-longer used
+        tellJSONField "portable-git"
+        return SetupInfo {..}
 
 instance Monoid SetupInfo where
     mempty =
@@ -1123,9 +1129,10 @@ data SetupInfoLocation
 
 instance FromJSON (SetupInfoLocation, [JSONWarning]) where
     parseJSON v =
-        inline <|>
+        --XXX if this order works better here, also switch the other place to do it like this
         ((, []) <$>
-         withText "SetupInfoLocation" (pure . SetupInfoFileOrURL . T.unpack) v)
+         withText "SetupInfoFileOrURL" (pure . SetupInfoFileOrURL . T.unpack) v) <|>
+        inline
       where
         inline = do
             (ixxx,w) <- parseJSON v
